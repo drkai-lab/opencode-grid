@@ -1,0 +1,3 @@
+# Nothing to ignore in a pure script repo.
+# Local runtime state (wire log, roles) lives outside the repo:
+#   ~/.local/state/oc-grid/

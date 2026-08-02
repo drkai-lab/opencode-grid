@@ -1,0 +1,48 @@
+#!/bin/bash
+set -euo pipefail
+
+DIR="${1:-$(pwd)}"
+SESSION="oc4"
+WIRE_DIR="$HOME/.local/state/oc-grid"
+WIRE="$WIRE_DIR/wire.log"
+ROLES="$WIRE_DIR/roles"
+mkdir -p "$WIRE_DIR"
+[ -f "$WIRE" ] || : > "$WIRE"
+
+# If a stale oc4 exists (created before roles existed), rebuild it fresh.
+if tmux has-session -t "$SESSION" 2>/dev/null && [ ! -f "$ROLES" ]; then
+  tmux kill-session -t "$SESSION"
+fi
+
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+  tmux new-session -d -s "$SESSION" -c "$DIR" 'opencode --agent orchestrator'
+  tmux set-option -t "$SESSION" pane-border-status top
+  tmux set-option -t "$SESSION" pane-border-format '#[align=right]#[fg=green]#{@role}#[default]'
+  tmux set-option -t "$SESSION" status off
+
+  tmux split-window -h -t "$SESSION" -c "$DIR" 'opencode --agent worker'
+  tmux select-pane -t "$SESSION:.1"
+  tmux split-window -v -t "$SESSION" -c "$DIR" 'opencode --agent worker'
+  tmux select-pane -t "$SESSION:.2"
+  tmux split-window -v -t "$SESSION" -c "$DIR" 'opencode --agent worker'
+  tmux select-layout tiled
+
+  # pane-base-index is 1 here: .1=top-left, .2=top-right,
+  # .3=bottom-left, .4=bottom-right (tiled order).
+  tmux set-option -p -t "$SESSION:.1" @role ORCHESTRATOR
+  tmux set-option -p -t "$SESSION:.2" @role WORKER-1
+  tmux set-option -p -t "$SESSION:.3" @role WORKER-2
+  tmux set-option -p -t "$SESSION:.4" @role WORKER-3
+
+  WIN=$(tmux list-windows -t "$SESSION" -F '#{window_index}' | head -1)
+  {
+    echo "ORCHESTRATOR=$SESSION:$WIN.1"
+    echo "WORKER-1=$SESSION:$WIN.2"
+    echo "WORKER-2=$SESSION:$WIN.3"
+    echo "WORKER-3=$SESSION:$WIN.4"
+  } > "$ROLES"
+
+  tmux select-pane -t "$SESSION:.1"
+fi
+
+exec tmux attach -t "$SESSION"
