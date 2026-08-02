@@ -67,7 +67,8 @@ elif grep -qE 'bindd *= *SUPER, *bracketright, *OpenCode 4-pane' "$BINDINGS" 2>/
         }
         flush(); in_cb = 0
       }
-      if ($0 ~ /^[[:space:]]*#/) { buf[++ccount] = $0; in_cb = 1; next }
+      if ($0 ~ /bindd = SUPER, bracketright, OpenCode 4-pane/) { next }
+      if ($0 ~ /^[[:space:]]*#/)           { buf[++ccount] = $0; in_cb = 1; next }
       print
     }
     END { flush() }
