@@ -91,9 +91,14 @@ else
   fi
   cat >> "$BINDINGS" <<EOF
 ${START_MARK}
-# OpenCode 4-pane grid: SUPER + ] launches the tmux oc4 session.
+# OpenCode 4-pane grid: SUPER + ] launches the tmux oc4 session,
+# SUPER + [ minimizes it (agents keep running), SUPER + W closes everything.
+# NOTE: SUPER + W is rebound from "close window" to "close the grid".
 # https://github.com/drkai-lab/opencode-grid
 bindd = SUPER, bracketright, OpenCode 4-pane, exec, uwsm-app -- ${TERMINAL} -e ${HOME}/.local/bin/opencode-grid
+bindd = SUPER, bracketleft, OpenCode 4-pane minimize, exec, tmux detach-client -s oc4
+unbind = SUPER, W
+bindd = SUPER, W, OpenCode 4-pane close all, exec, tmux kill-session -t oc4 2>/dev/null
 ${END_MARK}
 EOF
   echo "    added binding to ${BINDINGS}"
