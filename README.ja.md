@@ -25,8 +25,8 @@ Mac 時代の `cmd + ]` の癖が忘れられなくて、[Omarchy](https://omarc
 かんたん版:
 
 ```bash
-git clone https://github.com/drkai-lab/opencode-grid.git
-cd opencode-grid
+git clone https://github.com/drkai-lab/opencode4.git
+cd opencode4
 ./install.sh
 ```
 

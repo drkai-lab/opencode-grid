@@ -25,8 +25,8 @@ I built this because I missed `cmd + ]` from my Mac days and wanted it on [Omarc
 The easy way:
 
 ```bash
-git clone https://github.com/drkai-lab/opencode-grid.git
-cd opencode-grid
+git clone https://github.com/drkai-lab/opencode4.git
+cd opencode4
 ./install.sh
 ```
 
