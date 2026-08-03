@@ -1,0 +1,147 @@
+#!/bin/bash
+# oc-todo-view <ROLE>
+#
+# Persistent right-side Todo panel for an OpenCode4 grid pane (tmux session
+# "oc4"). Renders ~/.local/state/oc-grid/todo/<ROLE> as a numbered vertical
+# list and redraws it every OC_TODO_POLL seconds (default 1).
+#
+# Readability-first design:
+#   * fixed frame: title line, rule, body, rule, last-updated footer
+#   * each todo line becomes a numbered item, display-width word-wrapped
+#     (full-width CJK chars count as 2 columns, so Japanese text never breaks
+#     the frame — no terminal auto-wrap, no misalignment)
+#   * "( idle )" state when no task is set
+#   * "+N" overflow hint when the list is taller than the pane
+#
+# Redraw is `clear`-free: it homes the cursor and erases each row before
+# drawing, which is robust inside tmux panes with a pane-border.
+#
+# The pane is display-only: it never reads stdin.
+
+set -u
+
+ROLE="${1:-UNKNOWN}"
+STATEDIR="$HOME/.local/state/oc-grid/todo"
+FILE="$STATEDIR/$ROLE"
+POLL="${OC_TODO_POLL:-1}"
+
+mkdir -p "$STATEDIR" 2>/dev/null
+
+# todo_body <width> <maxlines>
+# Renders the Todo list body with display-width-aware wrapping/numbering.
+# Prints at most <maxlines> lines, then (if the list overflowed) a final
+# marker line "@@OVERFLOW N".
+todo_body() {
+  python3 - "$FILE" "$1" "$2" <<'PY'
+import os, sys, unicodedata
+path, W, MAX = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+
+def dw(s):
+    return sum(2 if unicodedata.east_asian_width(c) in ('W', 'F') else 1 for c in s)
+
+def clip(s):
+    if dw(s) <= W:
+        return s
+    out = []
+    for c in s:
+        cw = 2 if unicodedata.east_asian_width(c) in ('W', 'F') else 1
+        if dw(''.join(out)) + cw > W - 1:   # reserve 1 column for the ellipsis
+            break
+        out.append(c)
+    return ''.join(out) + '…'
+
+raw = []
+if os.path.exists(path) and os.path.getsize(path) > 0:
+    try:
+        with open(path, encoding='utf-8', errors='replace') as f:
+            raw = f.read().splitlines()
+    except OSError:
+        raw = []
+
+if not raw or raw[0].strip() == 'idle':
+    print('  ( idle )')
+    sys.exit(0)
+
+lines = []
+n = 0
+for ln in raw:
+    if not ln.strip():
+        continue
+    n += 1
+    prefix = '  %d. ' % n
+    cont = '     '
+    cur = prefix
+    for tok in ln.split():
+        sep = ' ' if cur != prefix else ''
+        if dw(cur) + dw(sep) + dw(tok) <= W:
+            cur += sep + tok
+        else:
+            lines.append(cur)
+            cur = cont + tok
+    lines.append(cur)
+
+printed = 0
+for l in lines:
+    if printed >= MAX:
+        break
+    print(clip(l))
+    printed += 1
+if len(lines) > printed:
+    print('@@OVERFLOW %d' % (len(lines) - printed))
+PY
+}
+
+redraw() {
+  local cols rows
+  cols=$(tput cols 2>/dev/null || echo 20)
+  rows=$(tput lines 2>/dev/null || echo 10)
+  [ "$cols" -ge 12 ] || cols=12
+  [ "$rows" -ge 6 ] || rows=6
+
+  local body_rows=$((rows - 2))   # body + bottom rule + footer
+  [ "$body_rows" -ge 1 ] || body_rows=1
+
+  # Home the cursor; each row is erased before drawing, and anything below
+  # the frame is erased at the end.
+  printf '\033[H'
+  emit() { printf '\033[K%s\n' "$1"; }
+
+  local rule
+  printf -v rule '%*s' "$cols" ''
+  rule=${rule// /─}
+
+  local body overflow=0 line emitted=0
+  body=$(todo_body "$cols" "$body_rows")
+  while IFS= read -r line; do
+    if [ "${line:0:10}" = "@@OVERFLOW" ]; then
+      overflow=${line#* }
+    elif [ "$emitted" -lt "$body_rows" ]; then
+      emit "${line:0:$cols}"
+      emitted=$((emitted + 1))
+    fi
+  done <<< "$body"
+  while [ "$emitted" -lt "$body_rows" ]; do
+    emit ""
+    emitted=$((emitted + 1))
+  done
+
+  emit "$rule"
+
+  local mtime="--:--:--"
+  if [ -f "$FILE" ]; then
+    mtime=$(date -d "@$(stat -c %Y "$FILE")" '+%H:%M:%S' 2>/dev/null || echo "--:--:--")
+  fi
+  local foot="upd $mtime"
+  [ "$overflow" -gt 0 ] && foot="$foot +${overflow}"
+  foot=${foot:0:$cols}
+  # No trailing newline: the frame fills the viewport exactly, and advancing
+  # past the last row would scroll the whole pane up by one (tmux pane, not a pipe).
+  printf '\033[K%s' "$foot"
+
+  printf '\033[J'
+}
+
+while :; do
+  redraw
+  sleep "$POLL"
+done

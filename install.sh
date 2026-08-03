@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Install the OpenCode 4-pane grid on an omarchy / Hyprland setup.
 #
-# - installs bin/opencode-grid and bin/oc-send into ~/.local/bin
+# - installs bin/opencode4, bin/oc-send, bin/oc-todo-view, bin/oc-todo-clear
+#   into ~/.local/bin
 # - copies agents/orchestrator.md and agents/worker.md into
 #   ~/.config/opencode/agents/ (never overwrites an existing file)
 # - wires the Hyprland keybinding: SUPER + ]  (OpenCode 4-pane)
@@ -17,6 +18,7 @@ AGENTS="${HOME}/.config/opencode/agents"
 MARK="opencode-grid"
 START_MARK="# >>> ${MARK} >>>"
 END_MARK="# <<< ${MARK} <<<"
+LAUNCHER="${BIN}/opencode4"
 
 step() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mWARN\033[0m %s\n' "$*" >&2; }
@@ -60,9 +62,11 @@ echo "    using terminal: $TERMINAL"
 # --- install scripts --------------------------------------------------------
 step "Installing scripts to ${BIN}/"
 mkdir -p "$BIN"
-install -m755 "${HERE}/bin/opencode-grid" "${BIN}/opencode-grid"
-install -m755 "${HERE}/bin/oc-send"        "${BIN}/oc-send"
-echo "    installed opencode-grid, oc-send"
+install -m755 "${HERE}/bin/opencode4"     "${BIN}/opencode4"
+install -m755 "${HERE}/bin/oc-send"       "${BIN}/oc-send"
+install -m755 "${HERE}/bin/oc-todo-view"  "${BIN}/oc-todo-view"
+install -m755 "${HERE}/bin/oc-todo-clear" "${BIN}/oc-todo-clear"
+echo "    installed opencode4, oc-send, oc-todo-view, oc-todo-clear"
 
 # --- install agent definitions (never overwrite) ----------------------------
 step "Installing opencode agent definitions to ${AGENTS}/"
@@ -95,7 +99,7 @@ ${START_MARK}
 # SUPER + [ minimizes it (agents keep running), SUPER + W closes everything.
 # NOTE: SUPER + W is rebound from "close window" to "close the grid".
 # https://github.com/drkai-lab/opencode-grid
-bindd = SUPER, bracketright, OpenCode 4-pane, exec, uwsm-app -- ${TERMINAL} -e ${HOME}/.local/bin/opencode-grid
+bindd = SUPER, bracketright, OpenCode 4-pane, exec, uwsm-app -- ${TERMINAL} -e ${LAUNCHER}
 bindd = SUPER, bracketleft, OpenCode 4-pane minimize, exec, tmux detach-client -s oc4
 unbind = SUPER, W
 bindd = SUPER, W, OpenCode 4-pane close all, exec, tmux kill-session -t oc4 2>/dev/null
@@ -121,4 +125,8 @@ Before the first run, edit the model: line in
   ~/.config/opencode/agents/worker.md
 to point at your provider (Ollama, opencode-go, ...). The distributed files
 ship with placeholder models that must be replaced.
+
+The grid opens with a Todo sidebar to the right of every pane: each agent's
+current task is shown there. Agents clear their Todo with `oc-todo-clear`
+once a task is done, so the sidebar only ever lists work in progress.
 NOTE

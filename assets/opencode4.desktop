@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=OpenCode4
+Name[ja]=OpenCode4
+Comment=OpenCode4: 4-pane AI agent grid (1 orchestrator + 3 workers)
+Comment[ja]=OpenCode4: 4ペインAIエージェントグリッド(オーケストレーター1 + ワーカー3)
+Exec=uwsm-app -- ghostty -e ~/.local/bin/opencode4
+Terminal=false
+Icon=utilities-terminal
+Categories=Development;Utility;
+StartupNotify=true

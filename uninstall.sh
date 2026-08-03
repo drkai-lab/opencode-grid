@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Remove the OpenCode 4-pane grid from an omarchy / Hyprland setup.
 #
-# - removes ~/.local/bin/opencode-grid and ~/.local/bin/oc-send
+# - removes ~/.local/bin/opencode4, oc-send, oc-todo-view, oc-todo-clear
+#   (and the legacy ~/.local/bin/opencode-grid)
 # - removes ~/.config/opencode/agents/orchestrator.md and worker.md
 #   (only when they still look like the distributed files)
 # - removes the SUPER + ] binding block from ~/.config/hypr/bindings.conf
@@ -21,8 +22,9 @@ die()  { printf '\033[1;31mERROR\033[0m %s\n' "$*" >&2; exit 1; }
 
 # --- scripts ----------------------------------------------------------------
 step "Removing scripts from ${BIN}/"
-rm -f "${BIN}/opencode-grid" "${BIN}/oc-send"
-echo "    removed opencode-grid, oc-send"
+rm -f "${BIN}/opencode4" "${BIN}/oc-send" "${BIN}/oc-todo-view" "${BIN}/oc-todo-clear"
+rm -f "${BIN}/opencode-grid"   # legacy name from older releases
+echo "    removed opencode4, oc-send, oc-todo-view, oc-todo-clear"
 
 # --- agent definitions (only if they still look like the distributed ones) ---
 step "Removing opencode agent definitions (untouched only)"

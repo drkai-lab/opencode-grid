@@ -27,4 +27,5 @@ Execute tasks assigned to you by the ORCHESTRATOR agent. Be concrete and complet
 
 1. Read the wire log to find your task.
 2. Complete the task using your tools.
-3. Report results to the ORCHESTRATOR via `oc-send`. Keep the report concise but complete.
+3. Clear your completed Todo BEFORE reporting: `oc-todo-clear WORKER-n` (n = your number). This removes the finished task from your Todo panel — only keep Todos that are still in progress.
+4. Report results to the ORCHESTRATOR via `oc-send`. Keep the report concise but complete.

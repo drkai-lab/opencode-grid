@@ -1,0 +1,92 @@
+#!/bin/bash
+set -euo pipefail
+
+DIR="${1:-$(pwd)}"
+SESSION="oc4"
+WIRE_DIR="$HOME/.local/state/oc-grid"
+WIRE="$WIRE_DIR/wire.log"
+ROLES="$WIRE_DIR/roles"
+GRID_VER=2
+GRID_STAMP="$WIRE_DIR/grid_ver"
+TODO_VIEW="$HOME/.local/bin/oc-todo-view"
+TODO_PCT="${OC_GRID_TODO_PCT:-23}"
+mkdir -p "$WIRE_DIR"
+[ -f "$WIRE" ] || : > "$WIRE"
+
+# Rebuild a stale oc4: missing session, missing roles file, a different grid
+# layout version (the Todo sidebars changed the pane structure), or a roles
+# target that no longer runs opencode.
+grid_ok() {
+  tmux has-session -t "$SESSION" 2>/dev/null || return 1
+  [ -f "$ROLES" ] || return 1
+  [ "$(cat "$GRID_STAMP" 2>/dev/null || echo 0)" = "$GRID_VER" ] || return 1
+  local _role pane cmd
+  while IFS='=' read -r _role pane; do
+    [ -n "$pane" ] || continue
+    cmd=$(tmux display-message -p -t "$pane" '#{pane_current_command}' 2>/dev/null) || return 1
+    case "$cmd" in *opencode*) ;; *) return 1 ;; esac
+  done < "$ROLES"
+  return 0
+}
+
+if ! grid_ok; then
+  tmux kill-session -t "$SESSION" 2>/dev/null || true
+fi
+
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+  tmux new-session -d -s "$SESSION" -c "$DIR" 'opencode --agent orchestrator'
+  tmux set-option -t "$SESSION" pane-border-status top
+  tmux set-option -t "$SESSION" pane-border-format '#[align=right]#[fg=green]#{@role}#[default]'
+  tmux set-option -t "$SESSION" status off
+
+  tmux split-window -h -t "$SESSION" -c "$DIR" 'opencode --agent worker'
+  tmux select-pane -t "$SESSION:.1"
+  tmux split-window -v -t "$SESSION" -c "$DIR" 'opencode --agent worker'
+  tmux select-pane -t "$SESSION:.2"
+  tmux split-window -v -t "$SESSION" -c "$DIR" 'opencode --agent worker'
+  tmux select-layout tiled
+
+  # pane-base-index is 1 here: .1=top-left, .2=top-right, .3=bottom-left,
+  # .4=bottom-right (tiled order). Roles live on the panes themselves; after
+  # the Todo splits below, tmux renumbers pane indices, so every later lookup
+  # resolves by @role (or pane id), never by a hard-coded index.
+  tmux set-option -p -t "$SESSION:.1" @role ORCHESTRATOR
+  tmux set-option -p -t "$SESSION:.2" @role WORKER-1
+  tmux set-option -p -t "$SESSION:.3" @role WORKER-2
+  tmux set-option -p -t "$SESSION:.4" @role WORKER-3
+
+  # Right-side Todo sidebar: every worker pane gets a display-only Todo panel
+  # (oc-todo-view) that renders todo/<ROLE> as a numbered vertical list.
+  # Each worker is re-resolved by @role after every split (splitting shifts
+  # pane indices), and the new Todo pane's id is captured via split-window -P.
+  if [ ! -x "$TODO_VIEW" ]; then
+    echo "warning: $TODO_VIEW not found — Todo sidebars disabled" >&2
+  else
+    for role in ORCHESTRATOR WORKER-1 WORKER-2 WORKER-3; do
+      wp=$(tmux list-panes -t "$SESSION" -F '#{pane_id} #{@role}' | awk -v r="$role" '$2==r {print $1}')
+      [ -n "$wp" ] || continue
+      tp=$(tmux split-window -h -p "$TODO_PCT" -t "$wp" -P -F '#{pane_id}' "$TODO_VIEW $role")
+      tmux set-option -p -t "$tp" @role "TODO"
+    done
+  fi
+
+  # Final grid (index order = visual order, left-to-right, top-to-bottom):
+  #   row1: ORCHESTRATOR | TODO | WORKER-1 | TODO
+  #   row2: WORKER-2      | TODO | WORKER-3 | TODO
+  # The roles file stores pane ids (%N), which are immune to index
+  # renumbering; oc-send and grid_ok accept them as plain tmux targets.
+  {
+    for role in ORCHESTRATOR WORKER-1 WORKER-2 WORKER-3; do
+      pid=$(tmux list-panes -t "$SESSION" -F '#{pane_id} #{@role}' | awk -v r="$role" '$2==r {print $1}')
+      if [ -n "$pid" ]; then
+        echo "$role=$pid"
+      fi
+    done
+  } > "$ROLES"
+
+  echo "$GRID_VER" > "$GRID_STAMP"
+
+  tmux select-pane -t "$SESSION:.1"
+fi
+
+exec tmux attach -t "$SESSION"

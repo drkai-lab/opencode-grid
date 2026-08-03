@@ -1,0 +1,66 @@
+#!/bin/bash
+# oc-todo-clear <ROLE> [message]
+#
+# Clears the current TODO for a grid agent (ORCHESTRATOR | WORKER-1..3).
+# - Without [message]: resets the agent's Todo to "( idle )".
+# - With [message]: writes that text as the agent's new Todo instead.
+#
+# The Todo state lives in ~/.local/state/oc-grid/todo/<ROLE> (displayed by the
+# oc-todo-view sidebars) and in the pane's tmux @todo option (shown in the
+# pane border). Both are updated here, so the screen reflects the change
+# immediately — no grid restart needed.
+#
+# Usage examples:
+#   oc-todo-clear WORKER-1          # task done -> idle
+#   oc-todo-clear ORCHESTRATOR      # orchestrator done -> idle
+#   oc-todo-clear WORKER-2 "Reviewing PR #42"   # switch to a new task
+
+set -euo pipefail
+
+ROLE=$(echo "${1:-}" | tr '[:lower:]' '[:upper:]')
+shift || true
+MSG="$*"
+
+WIRE_DIR="$HOME/.local/state/oc-grid"
+TODO_DIR="$WIRE_DIR/todo"
+ROLES="$WIRE_DIR/roles"
+
+case "$ROLE" in
+  ORCHESTRATOR|WORKER-1|WORKER-2|WORKER-3) ;;
+  *)
+    echo "usage: oc-todo-clear <ORCHESTRATOR|WORKER-1|WORKER-2|WORKER-3> [message]" >&2
+    exit 1
+    ;;
+esac
+
+mkdir -p "$TODO_DIR"
+
+if [ -z "$MSG" ]; then
+  printf 'idle' > "$TODO_DIR/$ROLE"
+else
+  ONE=$(printf '%s' "$MSG" | tr '\n' ' ' | tr -s ' ')
+  printf '%s' "$ONE" > "$TODO_DIR/$ROLE"
+fi
+
+# Update the pane's @todo option so the border label matches.
+PANE=""
+if [ -f "$ROLES" ]; then
+  PANE=$(grep -E "^$ROLE=" "$ROLES" | cut -d= -f2-)
+fi
+if [ -z "$PANE" ] && tmux has-session -t oc4 2>/dev/null; then
+  PANE=$(tmux list-panes -t oc4 -F '#{pane_id} #{@role}' | awk -v r="$ROLE" '$2==r {print $1}')
+fi
+
+if [ -n "$PANE" ] && tmux has-session -t oc4 2>/dev/null; then
+  if [ -z "$MSG" ]; then
+    tmux set-option -p -t "$PANE" @todo idle 2>/dev/null || true
+  else
+    DISPLAY=$(printf '%s' "$MSG" | tr '\n' ' ' | tr -s ' ' | cut -c1-40)
+    if [ "$(printf '%s' "$MSG" | tr '\n' ' ' | wc -m)" -gt 40 ]; then
+      DISPLAY="${DISPLAY}…"
+    fi
+    tmux set-option -p -t "$PANE" @todo "$DISPLAY" 2>/dev/null || true
+  fi
+fi
+
+echo "oc-todo-clear: $ROLE -> ${MSG:-idle}"

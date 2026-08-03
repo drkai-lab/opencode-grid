@@ -41,5 +41,24 @@ if ! tmux has-session -t oc4 2>/dev/null; then
 fi
 
 echo "[$(date '+%H:%M:%S')] -> $TARGET: $MSG" >> "$WIRE"
+
+# Track the message as this agent's current Todo (shown in the pane border).
+# Full text is kept in <state>/todo/<ROLE>, the border shows a short version.
+# An empty message resets the Todo to "idle".
+TODO_DIR="$WIRE_DIR/todo"
+mkdir -p "$TODO_DIR"
+if [ -z "$MSG" ]; then
+  printf 'idle' > "$TODO_DIR/$TARGET"
+  tmux set-option -p -t "$PANE" @todo idle 2>/dev/null || true
+else
+  TODO_ONE=$(printf '%s' "$MSG" | tr '\n' ' ' | tr -s ' ')
+  printf '%s' "$TODO_ONE" > "$TODO_DIR/$TARGET"
+  TODO_DISPLAY=$(printf '%s' "$TODO_ONE" | cut -c1-40)
+  if [ "$(printf '%s' "$TODO_ONE" | wc -m)" -gt 40 ]; then
+    TODO_DISPLAY="${TODO_DISPLAY}…"
+  fi
+  tmux set-option -p -t "$PANE" @todo "$TODO_DISPLAY" 2>/dev/null || true
+fi
+
 tmux send-keys -t "$PANE" -l "$MSG"
 tmux send-keys -t "$PANE" Enter
